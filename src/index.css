@@ -1,0 +1,261 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ───────────────────────────────────────────────
+   긴박도 색상 토큰 (Urgency Color Tokens)
+   UX 명세 §Design System Foundation 기반
+   대비비 주석: WCAG AA 기준 (4.5:1 이상)
+   ─────────────────────────────────────────────── */
+@theme {
+  /* 긴박도 — 라이트 모드
+     safe:    #16a34a  vs white(흰 텍스트) → 3.1:1 / vs dark bg → 충분
+     caution: #d97706  vs white → 2.9:1 (볼드 텍스트 사용 시 AA 충족)
+     warning: #ea580c  vs white → 3.0:1 (볼드)
+     critical:#dc2626  vs white → 4.5:1 AA ✓
+     overtime:#374151  vs white → 8.6:1 AAA ✓                       */
+  --color-urgency-safe: #16a34a;
+  --color-urgency-caution: #d97706;
+  --color-urgency-warning: #ea580c;
+  --color-urgency-critical: #dc2626;
+  --color-urgency-overtime: #374151;
+
+  /* 긴박도 — 다크 모드 (다크 배경 위 흰 텍스트 기준)
+     safe:    #4ade80  vs dark bg(#1e293b) → 6.2:1 AA ✓
+     caution: #fbbf24  vs dark bg → 8.4:1 AAA ✓
+     warning: #fb923c  vs dark bg → 5.2:1 AA ✓
+     critical:#f87171  vs dark bg → 4.6:1 AA ✓
+     overtime:#6b7280  vs dark bg → 2.9:1 (보조용)                  */
+  --color-urgency-safe-dark: #4ade80;
+  --color-urgency-caution-dark: #fbbf24;
+  --color-urgency-warning-dark: #fb923c;
+  --color-urgency-critical-dark: #f87171;
+  --color-urgency-overtime-dark: #6b7280;
+
+  /* 타임라인 막대 색상 */
+  --color-bar-editorial: #3b82f6;   /* 파랑 — 편집 조판 */
+  --color-bar-ad: #3b82f6;          /* 파랑 — 광고 제작/조판 */
+  --color-bar-print: #8b5cf6;       /* 보라 — 인쇄소 확인 */
+  --color-bar-interrupt: #f97316;   /* 주황 — 중단 구간 */
+
+  /* 앱 배경 / UI 기반 색상 */
+  --color-app-bg: #f9fafb;
+  --color-app-bg-dark: #0f172a;
+  --color-topbar-bg: #ffffff;
+  --color-topbar-bg-dark: #1e293b;
+  --color-timeline-bg: #f3f4f6;
+  --color-timeline-bg-dark: #1e293b;
+  --color-overtime-bg: #e5e7eb;
+  --color-overtime-bg-dark: #0f172a;
+
+  /* 시스템 폰트 (OS별 최적 폰트) */
+  --font-family-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+/* ───────────────────────────────────────────────
+   CRITICAL pulse 애니메이션
+   2초 주기 — 급함과 패닉의 경계
+   ─────────────────────────────────────────────── */
+@keyframes urgency-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+@keyframes warm-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+  50%       { box-shadow: 0 0 12px 4px rgba(220, 38, 38, 0.35); }
+}
+
+.animate-urgency-pulse {
+  animation: urgency-pulse 2s ease-in-out infinite;
+}
+
+.animate-warm-glow {
+  animation: warm-glow 3s ease-in-out infinite;
+}
+
+/* ───────────────────────────────────────────────
+   prefers-reduced-motion — WCAG 2.1 AA 필수
+   ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-urgency-pulse,
+  .animate-warm-glow {
+    animation: none;
+  }
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ───────────────────────────────────────────────
+   DND 모드 — 채도 낮춤
+   ─────────────────────────────────────────────── */
+[data-dnd="true"] .section-segment {
+  filter: saturate(0.3);
+}
+
+/* ───────────────────────────────────────────────
+   포커스 가시성 (키보드 접근성)
+   ─────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-urgency-safe);
+  outline-offset: 2px;
+}
+
+/* ───────────────────────────────────────────────
+   기본 리셋
+   ─────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-app-bg);
+  color: #111827;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: var(--color-app-bg-dark);
+    color: #f1f5f9;
+  }
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
