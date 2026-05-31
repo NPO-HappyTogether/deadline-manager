@@ -41,9 +41,11 @@ export interface IntensityPopupProps {
   onDismiss: () => void
 }
 
+import { INTENSITY_POPUP_AUTO_DISMISS_MS } from '@/lib/constants'
+
 // ─── 상수 ────────────────────────────────────────────────────
 
-const AUTO_DISMISS_MS = 7500       // 7.5초 자동소멸 (UX 명세: 7~8초)
+const AUTO_DISMISS_MS = INTENSITY_POPUP_AUTO_DISMISS_MS  // 7.5초 자동소멸
 const AUTO_DISMISS_WARN_MS = 1000  // 소멸 1초 전 경고
 
 /** 강도 레이블 — 차분한 언어 (패닉 증폭 금지) */

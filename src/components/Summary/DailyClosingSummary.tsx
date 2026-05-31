@@ -24,6 +24,8 @@ import { db, todayString, getInterruptionsForDate } from '@/lib/db'
 import { dbStatusToUI } from '@/lib/urgency'
 import { formatTime } from '@/lib/timeline'
 import { usePopupKeyCapture } from '@/hooks/usePopupKeyCapture'
+import { rowsToCsv, downloadCsv, formatTime as fmtTime } from '@/lib/export'
+import type { ExportRow } from '@/lib/export'
 
 // ─── Props ──────────────────────────────────────────────────
 
@@ -120,11 +122,48 @@ export function DailyClosingSummary({ onClose }: DailyClosingSummaryProps) {
       }
 
       setSaved(true)
+
+      // CSV 자동 저장 (Story 6.1) — export.ts를 통해서만 호출 (절대 규칙 7)
+      //
+      // TODO(D1): pages/sections는 useLiveQuery 스냅샷, interruptions는 별도 조회
+      // DB write와 다른 트랜잭션이므로 극히 드물게 불일치 가능
+      // 개선 방법: handleSave 시작 시 모든 데이터를 단일 Promise.all로 묶어 스냅샷 고정
+      // 현재는 실용적 문제 없음 — 나중에 정밀도가 필요할 때 수정
+      if (pages && sections) {
+        const sectionMapLocal = new Map(sections.map((s) => [s.id, s]))
+        const interruptions = await db.interruptions.where('date').equals(today).toArray()
+        const interruptsByPage = new Map<number, typeof interruptions>()
+        for (const ir of interruptions) {
+          const arr = interruptsByPage.get(ir.pageId) ?? []
+          arr.push(ir)
+          interruptsByPage.set(ir.pageId, arr)
+        }
+
+        const rows: ExportRow[] = pages.map((p) => {
+          const pageInterrupts = interruptsByPage.get(p.id) ?? []
+          return {
+            date: today,
+            sectionName: sectionMapLocal.get(p.sectionId)?.name ?? '',
+            pageNumber: p.pageNumber,
+            pageType: p.pageType,
+            startedAt: fmtTime(p.startedAt),
+            completedAt: fmtTime(p.completedAt),
+            printCount: p.printCount,
+            interruptCount: pageInterrupts.length,
+            interruptReasons: pageInterrupts.map((ir) => ir.reason ?? '').filter(Boolean).join('/'),
+            intensityScore: p.intensityScore,
+            intensityNote: p.intensityNote,
+          }
+        })
+        const csv = rowsToCsv(rows)
+        downloadCsv(csv, `마감기록_${today}.csv`)
+      }
+
       setTimeout(onClose, 1200) // 저장 확인 후 1.2초 후 자동 닫기
     } finally {
       setSaving(false)
     }
-  }, [pages, stats, today, interruptionCount, note, onClose])
+  }, [pages, stats, today, interruptionCount, note, onClose, sections])
 
   const sectionMap = useMemo(
     () => new Map(sections?.map((s) => [s.id, s]) ?? []),

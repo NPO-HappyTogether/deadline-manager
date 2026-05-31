@@ -39,17 +39,23 @@ export interface UrgencyResult {
   label: string          // 표시용 텍스트 ("32분" / "1시간 4분" / "15분 초과")
 }
 
+import {
+  URGENCY_CAUTION_MINUTES,
+  URGENCY_WARNING_MINUTES,
+  URGENCY_CRITICAL_PAUSED_MINUTES,
+} from '@/lib/constants'
+
 // ─── 상수 ───────────────────────────────────────────────────
 
 /** 긴박도 전환 임계값 (분) */
 const THRESHOLDS = {
-  CAUTION:  60,   // 1시간 이하 → 주의
-  WARNING:  30,   // 30분 이하 → 임박
-  CRITICAL: 15,   // 15분 이하 → 위험
+  CAUTION:  URGENCY_CAUTION_MINUTES,
+  WARNING:  URGENCY_WARNING_MINUTES,
+  CRITICAL: 15,   // 15분 이하 → 위험 (constants에서 별도 관리 불필요)
 } as const
 
 /** 일시정지 + 마감 임박 판정 기준 (분) */
-const CRITICAL_PAUSED_THRESHOLD = 30
+const CRITICAL_PAUSED_THRESHOLD = URGENCY_CRITICAL_PAUSED_MINUTES
 
 // ─── 핵심 함수 ──────────────────────────────────────────────
 

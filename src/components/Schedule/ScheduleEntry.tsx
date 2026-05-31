@@ -131,6 +131,8 @@ export function ScheduleEntry({ onClose }: ScheduleEntryProps) {
         autoCompleteContext: null,
         startedAt: null,
         completedAt: null,
+        printConfirmStep: 0,
+        printConfirmAt: null,
         createdAt: now,
         updatedAt: now,
       })
@@ -173,6 +175,8 @@ export function ScheduleEntry({ onClose }: ScheduleEntryProps) {
             autoCompleteContext: null,
             startedAt: null,
             completedAt: null,
+            printConfirmStep: 0,
+            printConfirmAt: null,
             createdAt: now,
             updatedAt: now,
           }

@@ -38,9 +38,22 @@ export interface Page {
   autoCompleteContext: AutoCompleteContext | null
   startedAt: Date | null   // ACTIVE 최초 전환 시각
   completedAt: Date | null // DONE 전환 시각
+  // 분판 확인 FSM (Story 5.1) — Dexie v2에서 추가
+  printConfirmStep: PrintConfirmStep  // 0=미시작, 1=전송완료, 2=확인중, 3=오류재전송, 4=최종확인
+  printConfirmAt: Date | null        // 마지막 단계 전환 시각
   createdAt: Date
   updatedAt: Date
 }
+
+/**
+ * 분판 확인 단계 (Story 5.1 FSM)
+ * 0: 미시작
+ * 1: 분판 전송 완료 (HANDED_OFF 전환 시)
+ * 2: 결과 확인 중
+ * 3: 오류 — 수정 후 재전송
+ * 4: 최종 확인 완료 → DONE 전환
+ */
+export type PrintConfirmStep = 0 | 1 | 2 | 3 | 4
 
 /** 자동 완료 시 저장되는 맥락 스냅샷 (UX 명세 §Journey 2) */
 export interface AutoCompleteContext {
@@ -86,11 +99,22 @@ export interface DailySummary {
 }
 
 /** 앱 설정 */
+/** 특수 발행일 오버라이드 (Story 5.4) */
+export interface SpecialDayOverride {
+  date: string         // "YYYY-MM-DD"
+  description: string  // "증간호", "휴간일" 등
+  cancelledSections?: number[]  // 취소된 섹션 ID 목록
+  addedSections?: Array<{ name: string; deadlineHour: number; deadlineMinute: number }>
+}
+
 export interface Settings {
   id: 1  // 싱글톤 — 항상 id=1
   theme: 'auto' | 'light' | 'dark'
   dnd: boolean          // 방해금지 모드
   onboardingHintExpiry: Date | null  // 힌트 소멸 시각 (첫 주 후 null)
+  onboardingDone: boolean            // 온보딩 완료 여부 (Story 7.4)
+  specialDays: SpecialDayOverride[]  // 특수 발행일 목록 (Story 5.4)
+  otherEditionChecklist: Record<string, boolean>  // 타주 파일 체크리스트 (Story 5.2)
   updatedAt: Date
 }
 
@@ -107,6 +131,12 @@ export class DeadlineDB extends Dexie {
   constructor() {
     super('DeadlineManagerDB')
 
+    // ─── 버전 관리 정책 ───────────────────────────────────────
+    // 스키마를 변경할 때는 반드시 새 버전 체인 추가:
+    //   this.version(N).stores({ ... }).upgrade(tx => { ... })
+    // 기존 version은 절대 수정하지 않는다 — 기존 사용자 데이터 보호
+    // 컬럼 추가 시 Dexie는 기존 레코드에 undefined로 처리하므로 안전
+    // ─────────────────────────────────────────────────────────
     this.version(1).stores({
       // ++ = auto-increment PK
       // & = unique index
@@ -119,6 +149,25 @@ export class DeadlineDB extends Dexie {
       dailySummary:  '++id, &date',
       settings:      'id',
     })
+
+    // v2: printConfirmStep, printConfirmAt 컬럼 추가 (Story 5.1)
+    // 기존 레코드는 Dexie가 undefined로 처리 — upgrade()로 기본값 0 설정
+    this.version(2).stores({
+      pages: '++id, sectionId, date, status, [sectionId+date], deadlineAt, printConfirmStep',
+    }).upgrade(async (tx) => {
+      await tx.table('pages').toCollection().modify((page) => {
+        if (page.printConfirmStep === undefined) {
+          page.printConfirmStep = 0
+          page.printConfirmAt = null
+        }
+      })
+    })
+
+    // v3: printConfirmAt 인덱스 추가 (D2 — 분판 이력 날짜 기반 조회용)
+    // pages 스키마에 printConfirmAt 인덱스 등록
+    this.version(3).stores({
+      pages: '++id, sectionId, date, status, [sectionId+date], deadlineAt, printConfirmStep, printConfirmAt',
+    })
   }
 }
 
@@ -127,7 +176,15 @@ export const db = new DeadlineDB()
 
 // ─── 초기 데이터 / 시드 ──────────────────────────────────
 
-/** 기본 섹션 목록 (UX 명세: 5섹션 4마감) */
+/**
+ * 기본 섹션 목록 (UX 명세: 5섹션 4마감)
+ *
+ * ─── 요일별 특별 규칙 (스케줄 생성 시 Story 5.3에서 적용) ───
+ * - 목요일: 본국지면 10면 (기본 5면 → 2배), 안내광고 16면 별도 발행
+ * - 화·수요일: 고부하일 (모든 섹션 동시 진행 가능성 높음)
+ * - 화요일: 부동산면 제작일 (발행은 목요일)
+ * ─────────────────────────────────────────────────────────────
+ */
 const DEFAULT_SECTIONS: Omit<Section, 'id' | 'createdAt'>[] = [
   { name: '본국지면',   displayOrder: 1, deadlineHour: 14, deadlineMinute: 0, isActive: true },
   { name: '안내광고',   displayOrder: 2, deadlineHour: 15, deadlineMinute: 0, isActive: true },
@@ -147,6 +204,9 @@ export async function initializeDB(): Promise<void> {
       theme: 'auto',
       dnd: false,
       onboardingHintExpiry: new Date(Date.now() + 7 * 24 * 60 * 60_000), // +7일
+      onboardingDone: false,
+      specialDays: [],
+      otherEditionChecklist: {},
       updatedAt: new Date(),
     })
   }
@@ -330,4 +390,145 @@ export async function undoSwitchActiveTask(
       }
     }
   })
+}
+
+/**
+ * 완료 취소 — DONE → 이전 상태(ACTIVE)로 되돌리기 (Story 3.2)
+ * 당일 기록에만 허용
+ */
+export async function undoPageCompletion(pageId: number): Promise<void> {
+  await db.transaction('rw', db.pages, db.statusHistory, async () => {
+    const page = await db.pages.get(pageId)
+    if (!page) throw new Error(`Page ${pageId} not found`)
+    if (page.status !== 'DONE') throw new Error('완료 상태가 아닙니다')
+
+    const now = new Date()
+    await db.pages.update(pageId, {
+      status: 'ACTIVE',
+      completedAt: null,
+      printConfirmStep: 0,   // P3: DONE 취소 시 분판 확인 단계도 초기화
+      printConfirmAt: null,
+      updatedAt: now,
+    })
+    await db.statusHistory.add({
+      pageId,
+      fromStatus: 'DONE',
+      toStatus: 'ACTIVE',
+      changedAt: now,
+      triggeredBy: 'user',
+    })
+  })
+}
+
+/**
+ * 당일 기록 수정 — 완료 시각 및 메모 업데이트 (Story 3.3)
+ * 소급 수정: 실제 완료 시각을 놓쳤을 때 수동 입력
+ */
+export async function editPageRecord(
+  pageId: number,
+  patch: { completedAt?: Date; intensityNote?: string | null }
+): Promise<void> {
+  const now = new Date()
+  await db.pages.update(pageId, { ...patch, updatedAt: now })
+}
+
+/**
+ * 분판 확인 단계 진행 (Story 5.1 FSM)
+ *
+ * 단계 흐름:
+ *   0(미시작) → 1(전송완료) → 2(확인중) → 4(최종확인=DONE)
+ *                              ↓ 오류 시
+ *                             3(재전송) → 2(재확인) → ...반복
+ *
+ * step=4 도달 시 Page를 DONE으로 전환
+ */
+export async function advancePrintConfirmStep(
+  pageId: number,
+  nextStep: PrintConfirmStep
+): Promise<void> {
+  // P1: nextStep 유효성 검사 (1~4만 허용)
+  if (nextStep < 1 || nextStep > 4) {
+    throw new Error(`유효하지 않은 printConfirmStep: ${nextStep}`)
+  }
+
+  await db.transaction('rw', db.pages, db.statusHistory, async () => {
+    const page = await db.pages.get(pageId)
+    if (!page) throw new Error(`Page ${pageId} not found`)
+
+    // P2: 동시 클릭 방지 — 현재 step 확인 후 유효한 전이인지 검증
+    const validNextSteps: Record<PrintConfirmStep, PrintConfirmStep[]> = {
+      0: [1], 1: [2], 2: [3, 4], 3: [2], 4: [],
+    }
+    if (!validNextSteps[page.printConfirmStep as PrintConfirmStep]?.includes(nextStep)) {
+      // 이미 다른 클릭이 처리됐거나 잘못된 전이 — 조용히 무시
+      return
+    }
+
+    // P4: now를 트랜잭션 내부에서 캡처 (커밋 시각과 일치)
+    const now = new Date()
+    const patch: Partial<Page> = {
+      printConfirmStep: nextStep,
+      printConfirmAt: now,
+      updatedAt: now,
+    }
+    // 최종 확인 완료 → DONE 전환
+    if (nextStep === 4) {
+      patch.status = 'DONE'
+      patch.completedAt = now
+      await db.statusHistory.add({
+        pageId,
+        fromStatus: page.status,
+        toStatus: 'DONE',
+        changedAt: now,
+        triggeredBy: 'user',
+      })
+    }
+    await db.pages.update(pageId, patch)
+  })
+}
+
+/**
+ * 타주 파일 체크리스트 항목 토글 (Story 5.2)
+ * settings.otherEditionChecklist: Record<string, boolean>
+ */
+export async function toggleOtherEditionCheck(key: string, value: boolean): Promise<void> {
+  const settings = await db.settings.get(1)
+  const current: Record<string, boolean> =
+    (settings as unknown as Record<string, unknown>)?.otherEditionChecklist as Record<string, boolean> ?? {}
+  const next = { ...current, [key]: value }
+
+  if (settings) {
+    // P5: update는 없는 키를 무시하므로 존재 여부 확인 후 분기
+    await db.settings.update(1, { otherEditionChecklist: next, updatedAt: new Date() })
+  } else {
+    // settings row 없으면 upsert
+    await db.settings.put({
+      id: 1, theme: 'auto', dnd: false, onboardingHintExpiry: null,
+      onboardingDone: false, specialDays: [], otherEditionChecklist: next,
+      updatedAt: new Date(),
+    })
+  }
+}
+
+/**
+ * 특수 발행일 등록/수정 (Story 5.4)
+ * 같은 날짜가 이미 있으면 덮어쓰기
+ */
+export async function upsertSpecialDay(override: SpecialDayOverride): Promise<void> {
+  const settings = await db.settings.get(1)
+  const current: SpecialDayOverride[] = (settings as unknown as Record<string, unknown>)?.specialDays as SpecialDayOverride[] ?? []
+  const filtered = current.filter((d) => d.date !== override.date)
+  await db.settings.update(1, {
+    specialDays: [...filtered, override],
+    updatedAt: new Date(),
+  })
+}
+
+/**
+ * 특정 날짜의 특수 발행일 조회
+ */
+export async function getSpecialDay(date: string): Promise<SpecialDayOverride | null> {
+  const settings = await db.settings.get(1)
+  const list: SpecialDayOverride[] = (settings as unknown as Record<string, unknown>)?.specialDays as SpecialDayOverride[] ?? []
+  return list.find((d) => d.date === date) ?? null
 }

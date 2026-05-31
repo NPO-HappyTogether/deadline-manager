@@ -15,6 +15,8 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/providers/ThemeProvider'
+import { Toaster } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { StatusBar } from '@/components/TopBar/StatusBar'
 import { isMockTimeActive, getDisplayNow } from '@/lib/time'
 import { ScheduleEntry } from '@/components/Schedule/ScheduleEntry'
@@ -24,6 +26,10 @@ import { PatternHeatmap } from '@/components/Analytics/PatternHeatmap'
 import { SettingsPanel } from '@/components/Settings/SettingsPanel'
 import { useDeadlineTrigger } from '@/hooks/useDeadlineTrigger'
 import { db, initializeDB, todayString } from '@/lib/db'
+import { INTENSITY_POPUP_TRIGGER_DELAY_MS } from '@/lib/constants'
+import { SectionCardList } from '@/components/Schedule/SectionCardList'
+import { PwaUpdateBanner } from '@/components/PwaUpdateBanner'
+import { Onboarding } from '@/components/Onboarding'
 import { dbStatusToUI } from '@/lib/urgency'
 import type { Page, Section } from '@/lib/db'
 
@@ -40,7 +46,8 @@ function AppContent() {
     initializeDB()
       .then(() => setDbReady(true))
       .catch(err => {
-        console.error('DB 초기화 실패:', err)
+        console.error('[db] 초기화 실패:', err)
+        toast.error('DB 초기화에 실패했습니다. 새로고침해주세요.')
         setDbReady(true) // 에러여도 앱은 표시 (빈 상태로라도)
       })
   }, [])
@@ -84,11 +91,11 @@ function AppContent() {
     // 기존 타이머 취소
     if (triggerTimerRef.current) clearTimeout(triggerTimerRef.current)
 
-    // 1.5초 딜레이 후 팝업 표시
+    // INTENSITY_POPUP_TRIGGER_DELAY_MS 딜레이 후 팝업 표시
     triggerTimerRef.current = setTimeout(() => {
       setIntensityPage(triggeredPage)
       triggerTimerRef.current = null
-    }, 1500)
+    }, INTENSITY_POPUP_TRIGGER_DELAY_MS)
 
     return () => {
       if (triggerTimerRef.current) {
@@ -156,26 +163,8 @@ function AppContent() {
       {/* StatusBar 높이만큼 padding (최대 44px) */}
       <main className="flex-1 flex flex-col" style={{ paddingTop: 44 }}>
 
-        {/* 오늘 작업 미등록 → 진입 안내 */}
-        {todayPageCount === 0 && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center space-y-3">
-              <p className="text-sm text-muted-foreground">
-                오늘 작업할 면을 등록해주세요
-              </p>
-              <p className="text-xs text-muted-foreground/50">
-                상단 회색 바 = 섹션 기본 마감 (작업 등록 전)
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowSchedule(true)}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
-              >
-                작업 등록
-              </button>
-            </div>
-          </div>
-        )}
+        {/* 섹션 카드 목록 — Empty State 포함 (Story 2.1) */}
+        <SectionCardList onOpenSchedule={() => setShowSchedule(true)} />
 
         {/* 스케줄 있을 때 — 히트맵 */}
         {hasSchedule && (
@@ -256,6 +245,9 @@ export default function App() {
         <div className="flex flex-col min-h-svh">
           <AppContent />
         </div>
+        <Toaster richColors position="bottom-right" />
+        <PwaUpdateBanner />
+        <Onboarding />
       </TooltipProvider>
     </ThemeProvider>
   )

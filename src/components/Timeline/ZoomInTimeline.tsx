@@ -323,6 +323,9 @@ export function ZoomInTimeline({ sectionId, sectionName, onClose, onOpenSchedule
       void executeSwitch(target)
     }
 
+    // 아키텍처 규칙 1 승인된 예외:
+    // ZoomInTimeline은 조건부 렌더링(zoomedSectionId !== null)으로만 마운트됨
+    // Tab/Shift+Tab 사이클링은 usePopupKeyCapture 지원 범위 밖 — 직접 처리
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     return () => {
@@ -504,6 +507,23 @@ export function ZoomInTimeline({ sectionId, sectionName, onClose, onOpenSchedule
                         ✓ 완료
                       </span>
                     </button>
+                  )}
+
+                  {/* 강도 점수 뱃지 — DONE 상태에서 표시 (Story 4.2) */}
+                  {uiStatus === 'done' && page.intensityScore !== null && (
+                    <div
+                      className="absolute left-1 top-0 h-full flex items-center pointer-events-none z-20"
+                      aria-label={`강도 ${page.intensityScore}`}
+                    >
+                      <span className={[
+                        'text-[9px] font-bold px-1 rounded leading-none py-0.5',
+                        page.intensityScore === 4
+                          ? 'bg-red-500/80 text-white'
+                          : 'bg-black/40 text-white',
+                      ].join(' ')}>
+                        {page.intensityScore === 4 ? `⚠${page.intensityScore}` : page.intensityScore}
+                      </span>
+                    </div>
                   )}
 
                   {/* 인쇄 카운트 뱃지 (1차 이상일 때만) */}

@@ -30,19 +30,26 @@ export interface TimeMarker {
   label: string   // "14:00", "15:30" 등
 }
 
+import {
+  TIMELINE_ZOOM_RANGE_MINUTES,
+  TIMELINE_TICK_INTERVAL_MINUTES,
+  TIMELINE_OVERTIME_START_HOUR,
+  TIMELINE_END_PADDING_MINUTES,
+} from '@/lib/constants'
+
 // ─── 상수 ───────────────────────────────────────────────────
 
 /** 줌인 범위 (분) */
-const ZOOM_RANGE_MINUTES = 60
+const ZOOM_RANGE_MINUTES = TIMELINE_ZOOM_RANGE_MINUTES
 
 /** 전체 타임라인 시작 시각 (09:00) */
 export const FULL_TIMELINE_START_HOUR = 9
 
 /** 전체 타임라인 종료 시각 (기본 18:00, 오버타임 시 자동 연장) */
-export const OVERTIME_START_HOUR = 18
+export const OVERTIME_START_HOUR = TIMELINE_OVERTIME_START_HOUR
 
 /** 눈금 간격 (분) */
-const TICK_INTERVAL_MINUTES = 15
+const TICK_INTERVAL_MINUTES = TIMELINE_TICK_INTERVAL_MINUTES
 
 // ─── 핵심 함수 ──────────────────────────────────────────────
 
@@ -122,10 +129,10 @@ export function calcFullRange(
   const defaultEnd = new Date(now)
   defaultEnd.setHours(OVERTIME_START_HOUR, 0, 0, 0)
 
-  // 마지막 마감이 18:00을 넘으면 그 시각 + 30분으로 연장
+  // 마지막 마감이 18:00을 넘으면 그 시각 + TIMELINE_END_PADDING_MINUTES로 연장
   let end = defaultEnd
   if (latestDeadline && latestDeadline > defaultEnd) {
-    end = new Date(latestDeadline.getTime() + 30 * 60_000)
+    end = new Date(latestDeadline.getTime() + TIMELINE_END_PADDING_MINUTES * 60_000)
   }
 
   return { start, end, now }
